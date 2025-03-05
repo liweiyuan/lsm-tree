@@ -5,7 +5,9 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Ok, Result};
+use bytes::Bytes;
+use crossbeam_skiplist::SkipMap;
 use parking_lot::Mutex;
 
 /// wal
@@ -35,6 +37,21 @@ impl Wal {
     pub(crate) fn put(&self, _key: &[u8], _value: &[u8]) -> Result<()> {
         /// todo!()
         Ok(())
+    }
+
+    /// Recover wal from file.
+    pub(crate) fn recover(path: &Path, map: &SkipMap<Bytes, Bytes>) -> Result<Self> {
+        //todo!()
+
+        let file = Arc::new(Mutex::new(BufWriter::new(
+            OpenOptions::new()
+                .read(true)
+                .create_new(true)
+                .write(true)
+                .open(path)
+                .context("Failed to open wal file")?,
+        )));
+        Ok(Self { file })
     }
 }
 
