@@ -43,6 +43,22 @@ impl MemTable {
         }
         Ok(())
     }
+
+    /// Get the approximate size of the mem-table.
+    ///
+    /// # Returns usize
+    pub fn approximate_size(&self) -> usize {
+        self.approximate_size
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Get the id of the mem-table.
+    ///
+    /// # Returns usize
+    ///
+    pub fn id(&self) -> usize {
+        self.id
+    }
 }
 
 /// MemTable test
