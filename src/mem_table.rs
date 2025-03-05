@@ -78,4 +78,12 @@ mod tests {
         mem_table.put(b"key", b"value").unwrap();
         assert_eq!(mem_table.get(b"key"), Some(Bytes::from_static(b"value")));
     }
+
+    /// Test mem_table get None
+    ///
+    #[test]
+    fn test_mem_table_get_none() {
+        let mem_table = MemTable::create(0);
+        assert_eq!(mem_table.get(b"key"), None);
+    }
 }
