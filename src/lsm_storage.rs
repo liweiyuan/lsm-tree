@@ -18,8 +18,8 @@ pub struct LsmStorageState {
     /// SsTables sorted by key range; L1 - L_max for leveled compaction, or tiers for tiered
     /// compaction.
     pub levels: Vec<(usize, Vec<usize>)>,
-    // SST objects.
-    //pub sstables: HashMap<usize, Arc<SsTable>>,
+    // SST objects. todo need to be sstable, just use [u8] for now
+    pub sstables: HashMap<usize, Arc<[u8]>>,
 }
 
 pub enum WriteBatchRecord<T: AsRef<[u8]>> {
@@ -61,7 +61,7 @@ impl LsmStorageState {
             l0_sstable: Vec::new(),
             levels,
             // todo!()
-            //sstables: HashMap::new(),
+            sstables: Default::default(),
         }
     }
 }
@@ -92,6 +92,6 @@ mod tests {
         assert_eq!(state.imm_memtable.len(), 0);
         assert_eq!(state.l0_sstable.len(), 0);
         assert_eq!(state.levels.len(), 10);
-        // assert_eq!(state.sstables.len(), 0);
+        assert_eq!(state.sstables.len(), 0);
     }
 }
