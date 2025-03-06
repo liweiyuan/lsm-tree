@@ -2,9 +2,9 @@ mod leveld;
 mod simple_leveld;
 mod tiered;
 
-use leveld::LeveledCompactionOptions;
-use simple_leveld::SimpleLeveledCompactionOptions;
-use tiered::TieredCompactionOptions;
+pub use leveld::LeveledCompactionOptions;
+pub use simple_leveld::SimpleLeveledCompactionOptions;
+pub use tiered::TieredCompactionOptions;
 
 #[derive(Debug, Clone)]
 pub enum CompactionOptions {
