@@ -105,6 +105,36 @@ impl LsmStorageInner {
         todo!()
     }
 
+    /// Get the value for the given key.
+    fn get(&self, key: &[u8]) -> Result<Option<Bytes>> {
+        let snapshot = {
+            let guard = self.state.read();
+            Arc::clone(&guard)
+        }; //drop global lock here
+        // search on the current memtable
+        if let Some(value) = snapshot.memtable.get(key) {
+            if value.is_empty() {
+                // found tomestone, return key not exists
+                return Ok(None);
+            }
+            return Ok(Some(value));
+        }
+
+        /// search on immutable memtablse.
+        for memtable in snapshot.imm_memtable.iter() {
+            if let Some(value) = memtable.get(key) {
+                if value.is_empty() {
+                    // found tomestone, return key not exists
+                    return Ok(None);
+                }
+                return Ok(Some(value));
+            }
+        }
+
+        /// search on sstables.
+        Ok(None)
+    }
+
     /// Spawn the compaction thread.
     fn spawn_compation_thread(
         &self,
@@ -169,6 +199,10 @@ impl MiniLsm {
             compaction_thread: Mutex::new(compaction_thread),
         };
         Ok(Arc::new(lsm))
+    }
+
+    pub fn get(&self, key: &[u8]) -> Result<Option<Bytes>> {
+        self.inner.get(key)
     }
 }
 
