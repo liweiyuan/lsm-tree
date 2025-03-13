@@ -60,13 +60,13 @@ impl MemTable {
     }
 
     /// Put a key-value pair.
-    pub fn put(&mut self, key: &[u8], value: &[u8]) -> Result<()> {
+    pub fn put(&self, key: &[u8], value: &[u8]) -> Result<()> {
         let estimated_size = key.len() + value.len();
         self.map
             .insert(Bytes::copy_from_slice(key), Bytes::copy_from_slice(value));
         self.approximate_size
             .fetch_add(estimated_size, std::sync::atomic::Ordering::Relaxed);
-        if let Some(wal) = &mut self.wal {
+        if let Some(ref wal) = self.wal {
             wal.put(key, value)?;
         }
         Ok(())

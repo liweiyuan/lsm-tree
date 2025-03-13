@@ -144,8 +144,7 @@ impl LsmStorageInner {
                     let size;
                     {
                         let guard = self.state.read();
-                        //todo why
-                        //guard.memtable.put(key, b"")?;
+                        guard.memtable.put(key, b"")?;
                         size = guard.memtable.approximate_size();
                     }
                     self.try_freeze(size)?;
@@ -158,8 +157,7 @@ impl LsmStorageInner {
                     let size;
                     {
                         let guard = self.state.read();
-                        //todo why
-                        //guard.memtable.put(key, value)?;
+                        guard.memtable.put(key, value)?;
                         size = guard.memtable.approximate_size();
                     }
                     self.try_freeze(size)?;
@@ -254,6 +252,15 @@ impl MiniLsm {
     /// Get a key from the storage.
     pub fn get(&self, key: &[u8]) -> Result<Option<Bytes>> {
         self.inner.get(key)
+    }
+
+    /// Put a key-value pair into the storage.
+    pub fn put(&self, key: &[u8], value: &[u8]) -> Result<()> {
+        self.inner.put(key, value)
+    }
+    /// Delete a key from the storage.
+    pub fn delete(&self, key: &[u8]) -> Result<()> {
+        self.inner.delete(key)
     }
 }
 
