@@ -5,7 +5,7 @@ use std::{
     thread::JoinHandle,
 };
 
-use anyhow::{Ok, Result};
+use anyhow::{Context, Result};
 use bytes::Bytes;
 use parking_lot::{Mutex, RwLock};
 
@@ -135,6 +135,56 @@ impl LsmStorageInner {
         Ok(None)
     }
 
+    pub fn write_batch<T: AsRef<[u8]>>(&self, batch: &[WriteBatchRecord<T>]) -> Result<()> {
+        for record in batch {
+            match record {
+                WriteBatchRecord::Del(key) => {
+                    let key = key.as_ref();
+                    assert!(!key.is_empty(), "key cannot be empty");
+                    let size;
+                    {
+                        let guard = self.state.read();
+                        //todo why
+                        //guard.memtable.put(key, b"")?;
+                        size = guard.memtable.approximate_size();
+                    }
+                    self.try_freeze(size)?;
+                }
+                WriteBatchRecord::Put(key, value) => {
+                    let key = key.as_ref();
+                    let value = value.as_ref();
+                    assert!(!key.is_empty(), "key cannot be empty");
+                    assert!(!value.is_empty(), "value cannot be empty");
+                    let size;
+                    {
+                        let guard = self.state.read();
+                        //todo why
+                        //guard.memtable.put(key, value)?;
+                        size = guard.memtable.approximate_size();
+                    }
+                    self.try_freeze(size)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Put a key-value pair into the storage.
+    ///
+    pub fn put(&self, key: &[u8], value: &[u8]) -> Result<()> {
+        self.write_batch(&[WriteBatchRecord::Put(key, value)])
+    }
+
+    /// Delete a key from the storage.
+    ///
+    pub fn delete(&self, key: &[u8]) -> Result<()> {
+        self.write_batch(&[WriteBatchRecord::Del(key)])
+    }
+
+    fn try_freeze(&self, size: usize) -> Result<()> {
+        todo!()
+    }
+
     /// Spawn the compaction thread.
     fn spawn_compation_thread(
         &self,
@@ -201,6 +251,7 @@ impl MiniLsm {
         Ok(Arc::new(lsm))
     }
 
+    /// Get a key from the storage.
     pub fn get(&self, key: &[u8]) -> Result<Option<Bytes>> {
         self.inner.get(key)
     }
@@ -237,7 +288,7 @@ mod tests {
 
     /// Test MiniLsm open
     ///
-    ///#[test]
+    //#[test]
     fn test_minilsm_open() {
         let path = PathBuf::from("test");
         let option = LsmStorageOptions {
