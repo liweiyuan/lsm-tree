@@ -5,9 +5,9 @@ use std::{
     thread::JoinHandle,
 };
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Ok, Result};
 use bytes::Bytes;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::{Mutex, MutexGuard, RwLock};
 
 use crate::{
     compact::{CompactionOptions, LeveledCompactionOptions, SimpleLeveledCompactionOptions},
@@ -99,108 +99,6 @@ pub(crate) struct LsmStorageInner {
     #[allow(dead_code)]
     pub(crate) compaction_filters: Arc<Mutex<Vec<CompactionFilter>>>,
 }
-impl LsmStorageInner {
-    fn open(path: impl AsRef<Path>, option: LsmStorageOptions) -> Result<Self> {
-        //todo
-        todo!()
-    }
-
-    /// Get the value for the given key.
-    fn get(&self, key: &[u8]) -> Result<Option<Bytes>> {
-        let snapshot = {
-            let guard = self.state.read();
-            Arc::clone(&guard)
-        }; //drop global lock here
-        // search on the current memtable
-        if let Some(value) = snapshot.memtable.get(key) {
-            if value.is_empty() {
-                // found tomestone, return key not exists
-                return Ok(None);
-            }
-            return Ok(Some(value));
-        }
-
-        /// search on immutable memtablse.
-        for memtable in snapshot.imm_memtable.iter() {
-            if let Some(value) = memtable.get(key) {
-                if value.is_empty() {
-                    // found tomestone, return key not exists
-                    return Ok(None);
-                }
-                return Ok(Some(value));
-            }
-        }
-
-        /// search on sstables.
-        Ok(None)
-    }
-
-    pub fn write_batch<T: AsRef<[u8]>>(&self, batch: &[WriteBatchRecord<T>]) -> Result<()> {
-        for record in batch {
-            match record {
-                WriteBatchRecord::Del(key) => {
-                    let key = key.as_ref();
-                    assert!(!key.is_empty(), "key cannot be empty");
-                    let size;
-                    {
-                        let guard = self.state.read();
-                        guard.memtable.put(key, b"")?;
-                        size = guard.memtable.approximate_size();
-                    }
-                    self.try_freeze(size)?;
-                }
-                WriteBatchRecord::Put(key, value) => {
-                    let key = key.as_ref();
-                    let value = value.as_ref();
-                    assert!(!key.is_empty(), "key cannot be empty");
-                    assert!(!value.is_empty(), "value cannot be empty");
-                    let size;
-                    {
-                        let guard = self.state.read();
-                        guard.memtable.put(key, value)?;
-                        size = guard.memtable.approximate_size();
-                    }
-                    self.try_freeze(size)?;
-                }
-            }
-        }
-        Ok(())
-    }
-
-    /// Put a key-value pair into the storage.
-    ///
-    pub fn put(&self, key: &[u8], value: &[u8]) -> Result<()> {
-        self.write_batch(&[WriteBatchRecord::Put(key, value)])
-    }
-
-    /// Delete a key from the storage.
-    ///
-    pub fn delete(&self, key: &[u8]) -> Result<()> {
-        self.write_batch(&[WriteBatchRecord::Del(key)])
-    }
-
-    fn try_freeze(&self, size: usize) -> Result<()> {
-        todo!()
-    }
-
-    /// Spawn the compaction thread.
-    fn spawn_compation_thread(
-        &self,
-        rx: crossbeam_channel::Receiver<()>,
-    ) -> Result<Option<std::thread::JoinHandle<()>>> {
-        //todo
-        todo!()
-    }
-
-    /// Spawn the flush thread.
-    fn spawn_flush_thread(
-        &self,
-        rx: crossbeam_channel::Receiver<()>,
-    ) -> Result<Option<std::thread::JoinHandle<()>>> {
-        //todo
-        todo!()
-    }
-}
 
 /// A thin wrapper for `LsmStorageInner` and the user interace for MiniLSM.
 pub struct MiniLsm {
@@ -264,10 +162,177 @@ impl MiniLsm {
     }
 }
 
+impl LsmStorageInner {
+    fn next_sst_id(&self) -> usize {
+        self.next_sst_id
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+    }
+
+    fn open(path: impl AsRef<Path>, option: LsmStorageOptions) -> Result<Self> {
+        //todo
+        todo!()
+    }
+
+    /// Get the value for the given key.
+    fn get(&self, key: &[u8]) -> Result<Option<Bytes>> {
+        let snapshot = {
+            let guard = self.state.read();
+            Arc::clone(&guard)
+        }; //drop global lock here
+        // search on the current memtable
+        if let Some(value) = snapshot.memtable.get(key) {
+            if value.is_empty() {
+                // found tomestone, return key not exists
+                return Ok(None);
+            }
+            return Ok(Some(value));
+        }
+
+        /// search on immutable memtablse.
+        for memtable in snapshot.imm_memtable.iter() {
+            if let Some(value) = memtable.get(key) {
+                if value.is_empty() {
+                    // found tomestone, return key not exists
+                    return Ok(None);
+                }
+                return Ok(Some(value));
+            }
+        }
+
+        /// search on sstables. todo
+        Ok(None)
+    }
+
+    pub fn write_batch<T: AsRef<[u8]>>(&self, batch: &[WriteBatchRecord<T>]) -> Result<()> {
+        for record in batch {
+            match record {
+                WriteBatchRecord::Del(key) => {
+                    let key = key.as_ref();
+                    assert!(!key.is_empty(), "key cannot be empty");
+                    let size;
+                    {
+                        let guard = self.state.read();
+                        guard.memtable.put(key, b"")?;
+                        size = guard.memtable.approximate_size();
+                    }
+                    self.try_freeze(size)?;
+                }
+                WriteBatchRecord::Put(key, value) => {
+                    let key = key.as_ref();
+                    let value = value.as_ref();
+                    assert!(!key.is_empty(), "key cannot be empty");
+                    assert!(!value.is_empty(), "value cannot be empty");
+                    let size;
+                    {
+                        let guard = self.state.read();
+                        guard.memtable.put(key, value)?;
+                        size = guard.memtable.approximate_size();
+                    }
+                    self.try_freeze(size)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Put a key-value pair into the storage.
+    ///
+    pub fn put(&self, key: &[u8], value: &[u8]) -> Result<()> {
+        self.write_batch(&[WriteBatchRecord::Put(key, value)])
+    }
+
+    /// Delete a key from the storage.
+    ///
+    pub fn delete(&self, key: &[u8]) -> Result<()> {
+        self.write_batch(&[WriteBatchRecord::Del(key)])
+    }
+
+    fn try_freeze(&self, estimated_size: usize) -> Result<()> {
+        if estimated_size >= self.options.target_sst_size {
+            let state_lock = self.state_lock.lock();
+            let guard = self.state.read();
+            // the memetable could hava already been frozen, check again to ensure we really need to freeze
+            if guard.memtable.approximate_size() >= self.options.target_sst_size {
+                drop(guard);
+                self.force_freeze_memtable(&state_lock)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Spawn the compaction thread.
+    fn spawn_compation_thread(
+        &self,
+        rx: crossbeam_channel::Receiver<()>,
+    ) -> Result<Option<std::thread::JoinHandle<()>>> {
+        //todo
+        todo!()
+    }
+
+    /// Spawn the flush thread.
+    fn spawn_flush_thread(
+        &self,
+        rx: crossbeam_channel::Receiver<()>,
+    ) -> Result<Option<std::thread::JoinHandle<()>>> {
+        //todo
+        todo!()
+    }
+
+    /// Force freeze the current memtable to an immutable memtable
+    fn force_freeze_memtable(&self, state_lock_observer: &MutexGuard<'_, ()>) -> Result<()> {
+        let memtable_id = self.next_sst_id();
+        let memtable = if self.options.enable_wal {
+            Arc::new(MemTable::create_with_wal(
+                memtable_id,
+                self.path_of_wal(memtable_id),
+            )?)
+        } else {
+            Arc::new(MemTable::create(memtable_id))
+        };
+
+        self.freeze_memtable_with_memtable(memtable)?;
+
+        //todo
+
+        Ok(())
+    }
+
+    pub(crate) fn path_of_wal_static(path: impl AsRef<Path>, id: usize) -> PathBuf {
+        path.as_ref().join(format!("{:05}.wal", id))
+    }
+
+    pub(crate) fn path_of_wal(&self, id: usize) -> PathBuf {
+        Self::path_of_wal_static(&self.path, id)
+    }
+
+    fn freeze_memtable_with_memtable(&self, memtable: Arc<MemTable>) -> Result<()> {
+        let mut guard = self.state.write();
+        // Swap the current memtable with a new one
+        let mut snapshot = guard.as_ref().clone();
+        let old_memtable = std::mem::replace(&mut snapshot.memtable, memtable);
+        // Add the old memtable to the immutable memtable list
+        snapshot.imm_memtable.insert(0, old_memtable.clone());
+        // Update the snapshot.
+        *guard = Arc::new(snapshot);
+        drop(guard);
+        // todo 同步wal
+        //old_memtable.sys_wal()?;
+        Ok(())
+    }
+}
+
 /// 测试
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Test format!
+    ///
+    #[test]
+    fn test_format() {
+        let s = format!("{:05}.wal", &1);
+        assert_eq!(s, "00001.wal");
+    }
 
     /// Test lsmStorageState create
     ///
